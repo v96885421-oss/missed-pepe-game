@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Миссед в погоне за Пепе</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+        #gameContainer {
+            text-align: center;
+        }
+        canvas {
+            border: 4px solid #00ff00;
+            background: #111;
+            display: block;
+            cursor: pointer;
+        }
+        #ui {
+            color: #00ff00;
+            margin-top: 15px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            cursor: pointer;
+            margin: 15px;
+            font-weight: bold;
+            border-radius: 10px;
+        }
+        #instructions {
+            color: #ffff00;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div id="ui">
+            <div>🎯 ОЧКИ: <span id="score">0</span> | 🏆 ЦЕЛЬ: 150</div>
+        </div>
+        <button onclick="startGame()">🚀 НАЧАТЬ ИГРУ</button>
+        <div id="instructions">ПРОБЕЛ или КЛИК - ПРЫЖОК!</div>
+    </div>
+
+<script>
+// ========== НАСТРОЙКИ ==========
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreElement = document.getElementById('score');
+
+let pepeSpawned = false;
+let pepeCollected = false;
+
+let score = 0;
+let gameRunning = false;
+let obstacles = [];
+let clouds = [];
+let scrollX = 0;
+let lastObstacleTime = 0;
+
+// ========== ЗАГРУЗКА ИЗОБРАЖЕНИЙ ==========
+const photos = {
+    player: new Image(),
+    nft: new Image(),
+    poop: new Image(),
+    pepe: new Image()
+};
+
+// Базовая картинка Пепе
+const base64Pepe = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAJ+SURBVHgB7d1BahNBFIbhN5M00UzqOq9bL+CmB3BZDyB4A/EI7tykF/AGIiIovQBeQTeCgpuACyHOTKZpJm3NJOk0nZnMfO/z+xaFhx8eM8nUY4wxDhTOMy4QCIQQEAIhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIQQEEJACAEhBIRQkIIf7u8Nzbe7M+96b7c2M9mYuTQb15Y77dr0pG8ODpvN/b8H8d5+I94/OGr2v4aJl7mUIhJ4xq5NjT9ZqM8t3r1RW5ivz9brU4EJPJNIf8rhZWOd6/2D5tftvfjbTqNhr/FHpmh6AU8c3jVjjaW8cv/G7KOlO7W63cCE+9G2syd/P2zvfnzz8ftv+z+OkfUQ6rRr1x7V5xZfPl94/ni+NmM3r5C4J8VubGz3+ftP3za+bO81t34exnad7DqV8aSk3d5f6+dS9W1g91/dfu2N23D6pfF7VnxV35ujyJivO/uNt283f9n/+lHaE2LX6qbdzKe2gaf367e3lxt27ax64k7c/ye/2p//4q3jG8wqpW+c1UbrpBuVd9qV5p6I1Vfft+0XvxXyhFS9M0+7PZ5zr9t2DZ+V9YRw2pWl+5x7W8gTwmlXpI7n3GwvT8jK8l17PSj9W8poVpbnHr5cXqitfdxu5/6E2F95uv0e5B/8d16uLNSqdt9yfiEcd7noPuc+5rpCDnr8hR5V/eV+3u3M11tR9CXKP0Q4NwY/xVg3ICCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBACQggIISCEgBASEvIPGT4Eful4ScoAAAAASUVORK5CYII=';
+
+// Загружаем картинки
+photos.player.src = 'ты.png';
+photos.nft.src = 'nft.png';
+photos.poop.src = 'говно.png';
+photos.pepe.src = 'золотая_пепе.png';
+
+// Если основная картинка не загрузится, используем base64
+photos.pepe.onerror = function() {
+    photos.pepe.src = base64Pepe;
+};
+
+// ========== ИГРОК ==========
+const player = {
+    x: 100,
+    y: 280,
+    width: 70,
+    height: 90,
+    velocityY: 0,
+    jumping: false,
+    groundY: 280,
+    jumpPower: -18
+};
+
+// ПЕПЕ ОБЪЕКТ - ПОЯВЛЯЕТСЯ СРАЗУ ПЕРЕД ИГРОКОМ!
+const pepe = {
+    x: 0, // Будет установлено при появлении
+    y: 180,
+    width: 120,
+    height: 120,
+    visible: false,
+    collected: false
+};
+
+// ========== ОБЛАКА ==========
+function createClouds() {
+    clouds = [];
+    for (let i = 0; i < 8; i++) {
+        clouds.push({
+            x: Math.random() * 2000,
+            y: Math.random() * 150 + 30,
+            width: Math.random() * 100 + 80,
+            height: Math.random() * 40 + 30,
+            speed: Math.random() * 0.5 + 0.2
+        });
+    }
+}
+
+function drawClouds() {
+    clouds.forEach(cloud => {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.beginPath();
+        ctx.arc(cloud.x, cloud.y, cloud.height, 0, Math.PI * 2);
+        ctx.arc(cloud.x + cloud.width * 0.3, cloud.y - cloud.height * 0.3, cloud.height * 0.8, 0, Math.PI * 2);
+        ctx.arc(cloud.x + cloud.width * 0.6, cloud.y, cloud.height * 0.9, 0, Math.PI * 2);
+        ctx.arc(cloud.x + cloud.width, cloud.y, cloud.height * 0.7, 0, Math.PI * 2);
+        ctx.arc(cloud.x + cloud.width * 0.7, cloud.y + cloud.height * 0.2, cloud.height * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.2)';
+        ctx.beginPath();
+        ctx.arc(cloud.x, cloud.y + 3, cloud.height, 0, Math.PI * 2);
+        ctx.arc(cloud.x + cloud.width * 0.3, cloud.y - cloud.height * 0.3 + 3, cloud.height * 0.8, 0, Math.PI * 2);
+        ctx.arc(cloud.x + cloud.width * 0.6, cloud.y + 3, cloud.height * 0.9, 0, Math.PI * 2);
+        ctx.fill();
+        
+        cloud.x -= cloud.speed;
+        if (cloud.x < -200) {
+            cloud.x = 800 + Math.random() * 100;
+            cloud.y = Math.random() * 150 + 30;
+        }
+    });
+}
+
+// ========== УПРАВЛЕНИЕ ==========
+document.addEventListener('keydown', function(e) {
+    if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        if (!player.jumping && gameRunning) {
+            player.jumping = true;
+            player.velocityY = player.jumpPower;
+        }
+    }
+});
+
+canvas.addEventListener('click', function() {
+    if (!player.jumping && gameRunning) {
+        player.jumping = true;
+        player.velocityY = player.jumpPower;
+    }
+});
+
+// ========== ГРАФИКА ==========
+function drawBackground() {
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(0, 0, 800, 300);
+    
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath();
+    ctx.arc(700, 80, 40, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 4;
+    for (let i = 0; i < 12; i++) {
+        const angle = (i * Math.PI) / 6;
+        const x1 = 700 + Math.cos(angle) * 45;
+        const y1 = 80 + Math.sin(angle) * 45;
+        const x2 = 700 + Math.cos(angle) * 60;
+        const y2 = 80 + Math.sin(angle) * 60;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+    }
+    
+    ctx.fillStyle = '#8BC34A';
+    ctx.fillRect(0, 300, 800, 100);
+    
+    ctx.fillStyle = '#7CB342';
+    ctx.fillRect(0, 300, 800, 5);
+    
+    ctx.fillStyle = '#689F38';
+    for (let i = 0; i < 50; i++) {
+        const x = Math.random() * 800;
+        const height = Math.random() * 10 + 5;
+        ctx.fillRect(x, 300 - height, 2, height);
+    }
+}
+
+function drawPlayer() {
+    if (photos.player.complete) {
+        ctx.drawImage(photos.player, player.x, player.y, player.width, player.height);
+    } else {
+        ctx.fillStyle = '#FF5252';
+        ctx.fillRect(player.x, player.y, player.width, player.height);
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 18px Arial';
+        ctx.fillText('ТЫ', player.x + 25, player.y + 55);
+    }
+}
+
+function drawNFT(x, y) {
+    if (photos.nft.complete) {
+        ctx.drawImage(photos.nft, x, y, 80, 80);
+    } else {
+        ctx.fillStyle = '#2196F3';
+        ctx.fillRect(x, y, 80, 80);
+        ctx.fillStyle = '#FFF';
+        ctx.font = 'bold 24px Arial';
+        ctx.fillText('NFT', x + 20, y + 50);
+    }
+}
+
+function drawPoop(x, y) {
+    if (photos.poop.complete) {
+        ctx.drawImage(photos.poop, x, y, 70, 50);
+    } else {
+        ctx.fillStyle = '#795548';
+        ctx.fillRect(x, y, 70, 50);
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 18px Arial';
+        ctx.fillText('ГОВНО', x + 10, y + 35);
+    }
+}
+
+// ========== РИСОВАНИЕ ПЕПЕ ==========
+function drawGoldenPepe() {
+    if (!pepe.visible || pepe.collected) return false;
+    
+    const screenX = pepe.x - scrollX;
+    
+    if (screenX > -200 && screenX < 800) {
+        // СИЯНИЕ
+        const pulse = Math.sin(Date.now() * 0.005) * 15 + 90;
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.5)';
+        ctx.beginPath();
+        ctx.arc(screenX + 60, pepe.y + 60, pulse, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // КАРТИНКА ПЕПЕ
+        if (photos.pepe.complete) {
+            ctx.drawImage(photos.pepe, screenX, pepe.y, pepe.width, pepe.height);
+        } else {
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(screenX, pepe.y, pepe.width, pepe.height);
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 60px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('P', screenX + 60, pepe.y + 80);
+            ctx.textAlign = 'left';
+        }
+        
+        // ЗВЕЗДЫ ВОКРУГ
+        ctx.save();
+        ctx.translate(screenX + 60, pepe.y + 60);
+        for (let i = 0; i < 8; i++) {
+            ctx.rotate(Math.PI / 4);
+            ctx.fillStyle = i % 2 === 0 ? '#FFFF00' : '#FF9900';
+            drawStar(0, 80, 5, 20, 10);
+        }
+        ctx.restore();
+        
+        return true;
+    }
+    return false;
+}
+
+// Функция для рисования звезды
+function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
+    let rot = Math.PI / 2 * 3;
+    let x = cx;
+    let y = cy;
+    let step = Math.PI / spikes;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerRadius);
+    
+    for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+    }
+    
+    ctx.lineTo(cx, cy - outerRadius);
+    ctx.closePath();
+    ctx.fill();
+}
+
+// ========== ИГРОВАЯ ЛОГИКА ==========
+function startGame() {
+    gameRunning = true;
+    score = 0;
+    obstacles = [];
+    scrollX = 0;
+    pepeSpawned = false;
+    pepeCollected = false;
+    pepe.visible = false;
+    
+    player.y = 280;
+    player.jumping = false;
+    player.velocityY = 0;
+    
+    createClouds();
+    scoreElement.textContent = score;
+    gameLoop();
+}
+
+function createObstacle() {
+    const now = Date.now();
+    if (now - lastObstacleTime < 1500) return;
+    if (obstacles.length >= 3) return;
+    
+    const type = Math.random() > 0.5 ? 'nft' : 'poop';
+    
+    obstacles.push({
+        type: type,
+        x: 800,
+        y: type === 'nft' ? 180 : 270,
+        width: type === 'nft' ? 80 : 70,
+        height: type === 'nft' ? 80 : 50,
+        passed: false
+    });
+    
+    lastObstacleTime = now;
+}
+
+function checkCollision(obj1, obj2) {
+    return obj1.x < obj2.x + obj2.width &&
+           obj1.x + player.width > obj2.x &&
+           player.y < obj2.y + obj2.height &&
+           player.y + player.height > obj2.y;
+}
+
+function checkPepeCollision() {
+    if (!pepe.visible || pepe.collected) return false;
+    
+    const screenX = pepe.x - scrollX;
+    
+    return player.x < screenX + pepe.width &&
+           player.x + player.width > screenX &&
+           player.y < pepe.y + pepe.height &&
+           player.y + player.height > pepe.y;
+}
+
+// ========== ГЛАВНЫЙ ЦИКЛ ==========
+function gameLoop() {
+    if (!gameRunning) return;
+    
+    scrollX += 7;
+    
+    // ФОН
+    drawBackground();
+    drawClouds();
+    
+    // ФИЗИКА
+    player.velocityY += 0.8;
+    player.y += player.velocityY;
+    
+    if (player.y > player.groundY) {
+        player.y = player.groundY;
+        player.jumping = false;
+        player.velocityY = 0;
+    }
+    
+    // АКТИВАЦИЯ ПЕПЕ - ПОЯВЛЯЕТСЯ СРАЗУ ПЕРЕД ИГРОКОМ!
+    if (score >= 150 && !pepeSpawned) {
+        pepeSpawned = true;
+        pepe.visible = true;
+        // Пепе появляется прямо перед игроком (примерно 500px впереди)
+        pepe.x = scrollX + 500;
+        console.log('🎯 Пепе появилась на позиции:', pepe.x);
+    }
+    
+    // СОЗДАНИЕ ПРЕПЯТСТВИЙ
+    if (Math.random() < 0.01) {
+        createObstacle();
+    }
+    
+    // ОБРАБОТКА ПРЕПЯТСТВИЙ
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        obs.x -= 7;
+        
+        if (checkCollision(player, obs)) {
+            gameOver();
+            return;
+        }
+        
+        if (!obs.passed && obs.x + obs.width < player.x) {
+            obs.passed = true;
+            score += 10;
+            scoreElement.textContent = score;
+        }
+        
+        if (obs.x < -150) {
+            obstacles.splice(i, 1);
+            continue;
+        }
+        
+        if (obs.type === 'nft') {
+            drawNFT(obs.x, obs.y);
+        } else {
+            drawPoop(obs.x, obs.y);
+        }
+    }
+    
+    // ОТОБРАЖЕНИЕ ПЕПЕ
+    if (pepe.visible && !pepe.collected) {
+        const pepeDrawn = drawGoldenPepe();
+        
+        // ПРОВЕРКА СТОЛКНОВЕНИЯ
+        if (checkPepeCollision()) {
+            pepe.collected = true;
+            showVictory();
+            return;
+        }
+        
+        // ПОДСКАЗКИ
+        if (pepeDrawn) {
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('🎯 БЕГИ К ПЕПЕ!', 400, 60);
+            ctx.textAlign = 'left';
+        }
+    }
+    
+    // ИГРОК
+    drawPlayer();
+    
+    // ИНТЕРФЕЙС
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 28px Arial';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 6;
+    ctx.strokeText(`🎯 ОЧКИ: ${score}`, 20, 40);
+    ctx.fillText(`🎯 ОЧКИ: ${score}`, 20, 40);
+    
+    if (score < 150) {
+        ctx.fillStyle = '#FFD700';
+        ctx.strokeText(`🏆 ДО ПЕПЕ: ${150 - score} очков`, 20, 85);
+        ctx.fillText(`🏆 ДО ПЕПЕ: ${150 - score} очков`, 20, 85);
+    } else if (pepe.visible && !pepe.collected) {
+        ctx.fillStyle = '#00FF00';
+        ctx.strokeText(`✨ ПЕПЕ ВПЕРЕДИ!`, 20, 85);
+        ctx.fillText(`✨ ПЕПЕ ВПЕРЕДИ!`, 20, 85);
+    }
+    
+    requestAnimationFrame(gameLoop);
+}
+
+function gameOver() {
+    gameRunning = false;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, 0, 800, 400);
+    
+    ctx.fillStyle = '#F44336';
+    ctx.font = 'bold 70px Arial';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 10;
+    ctx.strokeText('ПОТРАЧЕНО!', 220, 150);
+    ctx.fillText('ПОТРАЧЕНО!', 220, 150);
+    
+    ctx.fillStyle = '#FFF';
+    ctx.font = '36px Arial';
+    ctx.fillText(`Очки: ${score}`, 340, 200);
+    
+    ctx.fillStyle = '#4CAF50';
+    ctx.font = '28px Arial';
+    ctx.fillText('Нажми "НАЧАТЬ ИГРУ" чтобы попробовать снова', 100, 260);
+}
+
+// ========== ПОБЕДА - МГНОВЕННО ПРИ СТОЛКНОВЕНИИ С ПЕПЕ ==========
+function showVictory() {
+    gameRunning = false;
+    
+    // Анимация победы
+    let frame = 0;
+    
+    function victoryLoop() {
+        frame++;
+        
+        // ФОН
+        drawBackground();
+        drawClouds();
+        
+        // ФЕЙЕРВЕРК
+        for (let i = 0; i < 30; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * 300;
+            const x = 400 + Math.cos(angle) * dist;
+            const y = 200 + Math.sin(angle) * dist;
+            const size = Math.random() * 20 + 10;
+            const colors = ['#FFD700', '#FF9900', '#FF4444', '#44FF44', '#4444FF'];
+            ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // ЗАТЕМНЕНИЕ
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(0, 0, 800, 400);
+        
+        // БОЛЬШАЯ НАДПИСЬ ПОБЕДЫ
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 100px Arial';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 15;
+        ctx.textAlign = 'center';
+        ctx.strokeText('УРА!', 400, 120);
+        ctx.fillText('УРА!', 400, 120);
+        
+        ctx.fillStyle = '#4CAF50';
+        ctx.font = 'bold 50px Arial';
+        ctx.fillText('МИССЕД НАШЁЛ ПЕПЕ!', 400, 190);
+        
+        // СЧЁТ
+        ctx.fillStyle = '#FFF';
+        ctx.font = '40px Arial';
+        ctx.fillText(`🎉 ФИНАЛЬНЫЙ СЧЁТ: ${score}`, 400, 250);
+        
+        // БОЛЬШАЯ ПЕПЕ В ЦЕНТРЕ
+        const centerX = 250;
+        const centerY = 270;
+        
+        // СИЯНИЕ ВОКРУГ ПЕПЕ
+        const pulse = Math.sin(frame * 0.08) * 40 + 180;
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
+        ctx.beginPath();
+        ctx.arc(centerX + 150, centerY + 150, pulse, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // КАРТИНКА ПЕПЕ
+        if (photos.pepe.complete) {
+            ctx.drawImage(photos.pepe, centerX, centerY, 300, 300);
+        } else {
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(centerX, centerY, 300, 300);
+            ctx.strokeStyle = '#FF9900';
+            ctx.lineWidth = 15;
+            ctx.strokeRect(centerX, centerY, 300, 300);
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 150px Arial';
+            ctx.fillText('P', centerX + 150, centerY + 220);
+        }
+        
+        // ЗВЕЗДЫ ВОКРУГ ПЕПЕ
+        ctx.save();
+        ctx.translate(centerX + 150, centerY + 150);
+        for (let i = 0; i < 12; i++) {
+            ctx.rotate(Math.PI / 6);
+            const starPulse = Math.sin(frame * 0.1 + i) * 10 + 30;
+            ctx.fillStyle = i % 3 === 0 ? '#FFFF00' : (i % 3 === 1 ? '#FF9900' : '#FF4444');
+            drawStar(0, 200, 7, starPulse, starPulse / 2);
+        }
+        ctx.restore();
+        
+        // СООБЩЕНИЕ ВНИЗУ
+        ctx.fillStyle = '#FF9800';
+        ctx.font = '32px Arial';
+        ctx.fillText('Ты молодец, Миссед! Пепе твоя!', 200, 590);
+        
+        // МИГАЮЩАЯ ПОДСКАЗКА
+        if (Math.floor(frame / 30) % 2 === 0) {
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = '28px Arial';
+            ctx.fillText('Нажми "НАЧАТЬ ИГРУ" чтобы сыграть ещё раз', 120, 630);
+        }
+        
+        ctx.textAlign = 'left';
+        
+        if (frame < 600) { // 10 секунд анимации
+            requestAnimationFrame(victoryLoop);
+        }
+    }
+    
+    victoryLoop();
+}
+
+// ========== СТАРТОВЫЙ ЭКРАН ==========
+function drawStartScreen() {
+    drawBackground();
+    createClouds();
+    drawClouds();
+    
+    ctx.fillStyle = '#4CAF50';
+    ctx.font = 'bold 60px Arial';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 8;
+    ctx.strokeText('ПОГОНЯ ЗА ПЕПЕ', 180, 100);
+    ctx.fillText('ПОГОНЯ ЗА ПЕПЕ', 180, 100);
+    
+    ctx.fillStyle = '#FF9800';
+    ctx.font = '24px Arial';
+    ctx.fillText('1. Прыгай через NFT и говно, собирай очки', 80, 160);
+    ctx.fillText('2. Набери 150 очков - появится Золотая Пепе!', 80, 200);
+    ctx.fillText('3. Пепе появится прямо перед тобой', 80, 240);
+    ctx.fillText('4. Коснись Пепе чтобы победить!', 80, 280);
+    
+    drawNFT(400, 180);
+    drawPoop(500, 270);
+    
+    // ПЕПЕ НА СТАРТОВОМ ЭКРАНЕ
+    if (photos.pepe.complete) {
+        ctx.drawImage(photos.pepe, 600, 150, 80, 80);
+    } else {
+        ctx.fillStyle = '#FFD700';
+        ctx.fillRect(600, 150, 80, 80);
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 40px Arial';
+        ctx.fillText('P', 620, 210);
+    }
+    ctx.fillStyle = '#FFD700';
+    ctx.font = '16px Arial';
+    ctx.fillText('Победа!', 610, 240);
+    
+    drawPlayer();
+    
+    ctx.fillStyle = '#FFF';
+    ctx.font = '20px Arial';
+    ctx.fillText('ПРОБЕЛ или КЛИК - ПРЫЖОК', 250, 340);
+    
+    ctx.fillStyle = '#4CAF50';
+    ctx.font = 'bold 30px Arial';
+    ctx.fillText('Нажми "НАЧАТЬ ИГРУ"!', 250, 380);
+}
+
+// ЗАПУСК
+drawStartScreen();
+</script>
+</body>
+</html>
